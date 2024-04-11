@@ -16,7 +16,7 @@ immagine*[immagine]
 Il braccio telescopico è composto da due carrelli che si muovono in contemporanea per regolare la distanza dal ostacolo. I due motori sono controllati dall'ESP32 tramite un ponte H L298N. Il microcontrollore gestisce anche il sensore ad ultrasuoni per la rilevazione della distanza.
 
 # materiali
-1x ESP32
-1x sensore ad ultrasuoni
-1x ponte H doppio (del tipo L298N)
-2x carrelli di stampanti
+* 1x ESP32
+* 1x sensore ad ultrasuoni
+* 1x ponte H doppio (del tipo L298N)
+* 2x carrelli di stampanti
