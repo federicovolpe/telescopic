@@ -1,10 +1,10 @@
 //per il pid
 # include <PID_v1.h>
 double setpoint = 10; // distanza costante desiderata
-double input; // input dal sensore ad ultrasuoni
-double output; // distanza da spostarsi (espressa in millisecondi di attivazione del motore)
-double Kp = 0, Ki = 10, Kd = 0;
-PID myPID(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT); // ISTANZA DEL PID
+//double input; // input dal sensore ad ultrasuoni
+//double output; // distanza da spostarsi (espressa in millisecondi di attivazione del motore)
+//double Kp = 0, Ki = 10, Kd = 0;
+//PID myPID(&input, &output, &setpoint, Kp, Ki, Kd, DIRECT); // ISTANZA DEL PID
 
 // setup pins
 // per il motore
@@ -22,7 +22,15 @@ long duration;
 float distanceCm;
 float distanceInch;
 
+volatile bool finecorsa_indietro = false;
+volatile bool finecorsa_avanti = false;
+volatile int direzione = 1;
+
 void setup() {
+  //pulsante di fine corsa
+  pinMode(19, INPUT);
+  attachInterrupt(digitalPinToInterrupt(19), fineCorsaIndietro ,RISING);
+  attachInterrupt(digitalPinToInterrupt(19), attivaCorsaIndietro ,FALLING);
   pinMode(dir1, OUTPUT);
   pinMode(dir2, OUTPUT);
   pinMode(pwmPin, OUTPUT);
@@ -39,18 +47,20 @@ void setup() {
   Serial.begin(115200);
 }
 
-volatile int voltaggio = 200;
-volatile int direzione = 1;
+// ---------------------------------- funzioni di interrupt -------------------------------------------
+void fineCorsaIndietro(){
+  finecorsa_indietro = true;
+}
+void attivaCorsaIndietro() {
+  finecorsa_indietro = false;
+}
 
 void cambioDirezione() {
   if (input > setpoint){ // se la distanza è maggiore del set point torno indietro
-      Serial.println("in avanti !!!");
-      // switching dei pin
       digitalWrite(dir1, HIGH);
       digitalWrite(dir2, LOW);
       direzione = 1;
   }else{
-      Serial.println("indietro !!!");
       digitalWrite(dir1, LOW);
       digitalWrite(dir2, HIGH);
       direzione = -1;
@@ -78,35 +88,46 @@ int letturaUltrasuoni() {
   return distanceCm;
 }
 
-int calcolaOutput(int input) {
+
+
+int movimento(int input) {
+  int tempo_movimento = 0;
+  
   if(abs(input - setpoint) > 2) {
     if(direzione == -1){ // nel caso mi dovessi muovere indietro il valore in cm deve essere moltiplicato poichè 2ms sarebbero troppo pochi per il motore
-      return map(abs(input - setpoint), 2, 10, 10, 50);
+      tempo_movimento = map(abs(input - setpoint), 2, 10, 10, 30);
     }
-    return abs(input - setpoint);
+    tempo_movimento = map(abs(input - setpoint), 2, 10, 10, 30);
   }
-  return 0;
+  
+  analogWrite(pwmPin, 255);
+  delay(tempo_movimento);
+  analogWrite(pwmPin, 0);
+
+  return tempo_movimento;
 }
 
-void loop() {
-  // lettura del valore (settaggio della variabile input del pid)
-  input = //map(
-    letturaUltrasuoni();// , 
-              // 0, 1024,  // range dei possibili valori letti dal sensore
-              // 0, 300);  // range dei possibili valori di msecondi di accensione del motore
-  
-  // calcolo del pid
-  //myPID.Compute();  l'output del pid viene messo nella variabile output
+bool cisonoOstacoli(){
+  return (finecorsa_indietro && direzione == 0) || (finecorsa_avanti && direzione == 1);
+}
 
-  // emissione output
+
+void loop() {
+  //***************************************** lettura della distanza ********************************************
+  input = letturaUltrasuoni();
   cambioDirezione();
 
-  Serial.print("ms_movimento:");
+  //***************************************** movimento effettivo del braccio ********************************************
+  if(!cisonoOstacoli()) { // se mi posso muovere
+    delta_mov = movimento(input);  
+  }
+
+  //***************************************** stampa dei parametri di controllo ********************************************
+  Serial.print("durata_movimento:");
   Serial.println(calcolaOutput(input));  
-  // mi muovo per i msec indicati dal PID
-  analogWrite(pwmPin, voltaggio);
-  delay(calcolaOutput(input));
-  analogWrite(pwmPin, 0);
-  
-  delay(200); //delay di sicurezza per nonfare bruciare il motore
+  Serial.print("pulsante:");
+  Serial.println(digitalRead(19)); 
+
+
+  delay(100); //delay di sicurezza per nonfare bruciare il motore
 }
