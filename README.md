@@ -20,3 +20,15 @@ Il braccio telescopico è composto da due carrelli che si muovono in contemporan
 * 1x sensore ad ultrasuoni
 * 1x ponte H doppio (del tipo L298N)
 * 2x carrelli di stampanti
+
+# problemi riscontrati
+
+come segnalare il fine corsa:
+all'inizio ho adottato la soluzione che prevedeva due pulsanti di fine corsa
+due interrupt collegati a ciascun pulsante consentevano:
+- segnalare il fine corsa quando il pulsante veniva premuto
+- desegnalare il fine corsa quando il pulsante non era piu premuto
+
+soluzione trovata:
+ utilizzare due pad collegati a interrupt pin a fine corsa in ambo le direzioni,
+ una volta arrivato a fine corsa il 5v collegato alla testa avrebbe fato contato con il pad segalando il fine corsa

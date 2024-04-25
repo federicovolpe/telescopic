@@ -8,54 +8,50 @@ double setpoint = 10; // distanza costante desiderata
 
 // setup pins
 // per il motore
-const int dir1 = 2;
-const int dir2 = 4;
-const int pwmPin = 15;
-const int Signal = 13;  // apparentemente non serve
+const int dir1 = 13, dir2 = 12, pwmPin = 11, Signal = 0;  // apparentemente non serve
+
+// pin di interrupt fine corsa
+const int finecAvanti = A1, finecIndietro = A2;
+volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro;
 
 // per il sensore ad ultrasuoni
-const int trigPin = 5;
-const int echoPin = 18;     
+const int trigPin = 5, echoPin = 4;     
 #define SOUND_SPEED 0.034
 #define CM_TO_INCH 0.393701
 long duration;
 float distanceCm;
 float distanceInch;
 
-volatile bool finecorsa_indietro = false;
-volatile bool finecorsa_avanti = false;
+volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
 volatile int direzione = 1;
 
 void setup() {
-  //pulsante di fine corsa
-  pinMode(19, INPUT);
-  attachInterrupt(digitalPinToInterrupt(19), fineCorsaIndietro ,RISING);
-  attachInterrupt(digitalPinToInterrupt(19), attivaCorsaIndietro ,FALLING);
+  // pin per il motore
   pinMode(dir1, OUTPUT);
   pinMode(dir2, OUTPUT);
   pinMode(pwmPin, OUTPUT);
   pinMode(Signal, OUTPUT);
+
+  // pin di interrupt
+  pinMode(finecAvanti, INPUT);
+  pinMode(finecIndietro, INPUT);
+  sogliaFineCorsaAvanti = analogRead(finecAvanti);
+  sogliaFineCorsaIndietro = analogRead(finecIndietro);
 
   // pin per il sensore ad ultrasuoni
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input
 
   // riguardo il pid
-  myPID.SetMode(AUTOMATIC); // accensione del processo pid
-  myPID.SetTunings(Kp, Ki, Kd); //   passaggio dei parametri per il pid
+  //myPID.SetMode(AUTOMATIC); // accensione del processo pid
+  //myPID.SetTunings(Kp, Ki, Kd); //   passaggio dei parametri per il pid
    
-  Serial.begin(115200);
+  Serial.begin(9600);
 }
 
-// ---------------------------------- funzioni di interrupt -------------------------------------------
-void fineCorsaIndietro(){
-  finecorsa_indietro = true;
-}
-void attivaCorsaIndietro() {
-  finecorsa_indietro = false;
-}
 
-void cambioDirezione() {
+
+void cambioDirezione(int input) {
   if (input > setpoint){ // se la distanza è maggiore del set point torno indietro
       digitalWrite(dir1, HIGH);
       digitalWrite(dir2, LOW);
@@ -64,6 +60,12 @@ void cambioDirezione() {
       digitalWrite(dir1, LOW);
       digitalWrite(dir2, HIGH);
       direzione = -1;
+  }
+  if(direzione == 1){
+    Serial.println("avanti");
+
+  }else{
+    Serial.println("indietro");
   }
 }
 
@@ -82,14 +84,14 @@ int letturaUltrasuoni() {
   // Calculate the distance
   distanceCm = duration * SOUND_SPEED/2;
   
-  // Prints the distance in the Serial Monitor
+  /* Prints the distance in the Serial Monitor*/
   Serial.print("Distance(cm):");
   Serial.println(distanceCm);
   return distanceCm;
 }
 
 
-
+// calcola il tempo di movimento del motore e ritorna lo stesso
 int movimento(int input) {
   int tempo_movimento = 0;
   
@@ -107,27 +109,49 @@ int movimento(int input) {
   return tempo_movimento;
 }
 
-bool cisonoOstacoli(){
-  return (finecorsa_indietro && direzione == 0) || (finecorsa_avanti && direzione == 1);
+bool direzioneConcessa(){ // consento il movimento solo nella direzione libera
+  if (finecorsa_indietro && direzione == 0) return false; // se posso solo andare avanti
+  if (finecorsa_avanti && direzione == 1) return false;
+
+  // resetto i parametri di fine corsa dato che il motore si sarà discostato dal fine corsa
+  finecorsa_avanti = false;
+  finecorsa_indietro = false;
+  return true;
 }
 
 
 void loop() {
   //***************************************** lettura della distanza ********************************************
-  input = letturaUltrasuoni();
-  cambioDirezione();
+  int input = letturaUltrasuoni();
+  cambioDirezione(input);
 
   //***************************************** movimento effettivo del braccio ********************************************
-  if(!cisonoOstacoli()) { // se mi posso muovere
+  int delta_mov = 0;
+  if(direzioneConcessa()) { // se mi posso muovere
     delta_mov = movimento(input);  
   }
 
+  //**************************** calcolo dei prarametri di fine corsa ***************************
+  if( (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > (sogliaFineCorsaAvanti / 5)){
+    Serial.println("fine corsa avanti !!!!!! ");
+    finecorsa_avanti = true;
+  }else {finecorsa_avanti = false;}
+  if( (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > (sogliaFineCorsaIndietro / 5)){
+    Serial.println("fine corsa indietro !!!!!! ");
+    finecorsa_indietro = true;
+  }else {finecorsa_indietro = false;}
+
   //***************************************** stampa dei parametri di controllo ********************************************
   Serial.print("durata_movimento:");
-  Serial.println(calcolaOutput(input));  
-  Serial.print("pulsante:");
-  Serial.println(digitalRead(19)); 
+  Serial.println(delta_mov);  
+  Serial.print("finecorsa Indietro:");
+  Serial.println(finecorsa_indietro);
+  Serial.print("finecorsa Avanti:");
+  Serial.println(finecorsa_avanti); 
+  Serial.print("avanti:");
+  Serial.println(analogRead(finecAvanti));
+  Serial.print("indietro:");
+  Serial.println(analogRead(finecIndietro));
 
-
-  delay(100); //delay di sicurezza per nonfare bruciare il motore
+  delay(250); //delay di sicurezza per nonfare bruciare il motore
 }
