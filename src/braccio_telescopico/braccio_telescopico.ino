@@ -1,4 +1,6 @@
-//per il pid
+//V 1.0 : il pid gestisce il tempo in cui il motore resta acceso
+
+
 # include <PID_v1.h>
 double setpoint = 10; // distanza costante desiderata
 //double input; // input dal sensore ad ultrasuoni
@@ -11,7 +13,7 @@ double setpoint = 10; // distanza costante desiderata
 const int dir1 = 13, dir2 = 12, pwmPin = 11, Signal = 0;  // apparentemente non serve
 
 // pin di interrupt fine corsa
-const int finecAvanti = A1, finecIndietro = A2;
+const int finecAvanti = A1, finecIndietro = A3;
 volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro;
 
 // per il sensore ad ultrasuoni
@@ -26,7 +28,17 @@ volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
 volatile int direzione = 1;
 
 void setup() {
+  // pins per il semaforo
+  pinMode(10, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(8, OUTPUT);
+  digitalWrite(10, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(8, HIGH);
+
   // pin per il motore
+  pinMode(A0, INPUT);
+  
   pinMode(dir1, OUTPUT);
   pinMode(dir2, OUTPUT);
   pinMode(pwmPin, OUTPUT);
@@ -47,6 +59,9 @@ void setup() {
   //myPID.SetTunings(Kp, Ki, Kd); //   passaggio dei parametri per il pid
    
   Serial.begin(9600);
+
+  // un secondo prima di iniziare
+  delay(1000);
 }
 
 
@@ -59,13 +74,13 @@ void cambioDirezione(int input) {
   }else{
       digitalWrite(dir1, LOW);
       digitalWrite(dir2, HIGH);
-      direzione = -1;
+      direzione = 0;
   }
   if(direzione == 1){
     Serial.println("avanti");
 
   }else{
-    Serial.println("indietro");
+    Serial.print("indietro" );
   }
 }
 
@@ -112,10 +127,6 @@ int movimento(int input) {
 bool direzioneConcessa(){ // consento il movimento solo nella direzione libera
   if (finecorsa_indietro && direzione == 0) return false; // se posso solo andare avanti
   if (finecorsa_avanti && direzione == 1) return false;
-
-  // resetto i parametri di fine corsa dato che il motore si sarà discostato dal fine corsa
-  finecorsa_avanti = false;
-  finecorsa_indietro = false;
   return true;
 }
 
@@ -132,26 +143,49 @@ void loop() {
   }
 
   //**************************** calcolo dei prarametri di fine corsa ***************************
-  if( (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > (sogliaFineCorsaAvanti / 5)){
-    Serial.println("fine corsa avanti !!!!!! ");
+  if(finecorsa_avanti && direzione == 1) {
+    Serial.println("--------non cambio");
+  }else if ( (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > (sogliaFineCorsaAvanti / 5)){
+    Serial.println("--------  fine corsa avanti !!!!!! ");
+    digitalWrite(8, HIGH);
     finecorsa_avanti = true;
-  }else {finecorsa_avanti = false;}
-  if( (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > (sogliaFineCorsaIndietro / 5)){
-    Serial.println("fine corsa indietro !!!!!! ");
+  }else{
+    digitalWrite(8, LOW);
+    finecorsa_avanti = false;
+  } 
+
+  if(finecorsa_indietro && direzione == 0){// non cambia se continuo a voler andare verso il finecorsa
+    Serial.println("--------non cambio");
+  }else if( (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > (sogliaFineCorsaIndietro / 5)){ // altrimenti ricalcolo i finecorsa
+    Serial.println("--------  fine corsa indietro !!!!!! ");
+    digitalWrite(10, HIGH);
     finecorsa_indietro = true;
-  }else {finecorsa_indietro = false;}
+  }else{
+    finecorsa_indietro = false;
+    digitalWrite(10, LOW);
+  }
+  
 
   //***************************************** stampa dei parametri di controllo ********************************************
-  Serial.print("durata_movimento:");
+  /*Serial.print("movimento:");
+  if(direzione == 1){
   Serial.println(delta_mov);  
-  Serial.print("finecorsa Indietro:");
+  }else{
+    Serial.println(- delta_mov);  
+  }
+  /*Serial.print("finecorsa Indietro:");
   Serial.println(finecorsa_indietro);
   Serial.print("finecorsa Avanti:");
-  Serial.println(finecorsa_avanti); 
-  Serial.print("avanti:");
+  Serial.println(finecorsa_avanti); */
+
+  Serial.print("sensore_avanti:");
   Serial.println(analogRead(finecAvanti));
-  Serial.print("indietro:");
+  Serial.print("sensore_indietro:");
   Serial.println(analogRead(finecIndietro));
 
-  delay(250); //delay di sicurezza per nonfare bruciare il motore
+  // segnalazione semaforo finecorsa
+  if(!finecorsa_avanti && !finecorsa_indietro){digitalWrite(9, HIGH);}else {digitalWrite(9, LOW);}
+  Serial.println("---------------------------------------");
+
+  delay(200); //delay di sicurezza per nonfare bruciare il motore
 }
