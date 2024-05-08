@@ -3,9 +3,11 @@
 const int obiettivo = 10; // obiettivo di distanza in cm 
 #define SOGLIA 1 
 #define SOUND_SPEED 0.034 
+#define TRESHOLD 40
 volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro; // parametri di riferimento iniziali per le fotoresistenze
 volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
 volatile int direzione = 1;
+volatile int distanza = obiettivo; // distanza inizializzata come l'obiettivo per non fare iniziare con scatti strani
 
 // setup pins
 // per il motore
@@ -49,8 +51,8 @@ void setup() {
 }
 
 
-void cambioDirezione(int input) {
-  if (input > obiettivo){ // se la distanza è maggiore del set point torno indietro
+void cambioDirezione() {
+  if (distanza > obiettivo){ // se la distanza è maggiore del set point torno indietro
       digitalWrite(dir1, HIGH);
       digitalWrite(dir2, LOW);
       direzione = 1;
@@ -67,7 +69,7 @@ void cambioDirezione(int input) {
   }
 }
 
-int letturaUltrasuoni() {
+void letturaUltrasuoni() {
   // Clears the trigPin
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -80,31 +82,21 @@ int letturaUltrasuoni() {
   long duration = pulseIn(echoPin, HIGH);
   
   // Calculate the distance
-  float distanceCm = duration * SOUND_SPEED/2;
-  
-  /* Prints the distance in the Serial Monitor*/
-  Serial.print("Distance(cm):");
-  Serial.println(distanceCm);
-  return distanceCm;
+  distanza = duration * SOUND_SPEED/2;
 }
 
 
-int movimento(int input) { // calcola il tempo di movimento del motore e ritorna lo stesso
+int movimento(int offset) { // calcola il tempo di movimento del motore e ritorna lo stesso
   int tempo_movimento = 0;
-  
-  if(abs(input - obiettivo) > SOGLIA) { // se la distanza è off di 2cm
-    if(direzione == 0){ // nel caso mi dovessi muovere indietro il valore in cm deve essere moltiplicato poichè 2ms sarebbero troppo pochi per il motore
-      tempo_movimento = map(abs(input - obiettivo), SOGLIA, 10, 20, 40);
-    }
-    tempo_movimento = map(abs(input - obiettivo), SOGLIA, 200, 20, 40);
+
+  if(direzione == 0){ // il movimento in avanti è diversamente proporzionato da quello indietro
+    tempo_movimento = map(offset, SOGLIA, obiettivo, 20, 40);
+  }else{
+    tempo_movimento = map(offset, SOGLIA, 40, 20, 40);
   }
-  Serial.print("------------      tempo calcolato :");
-  Serial.print(tempo_movimento);
-  Serial.println("     ------------");
   
   digitalWrite(pwmPin, HIGH);
   delay(tempo_movimento);
-  //delay(500);
   digitalWrite(pwmPin, LOW);
 
   return tempo_movimento;
@@ -149,6 +141,9 @@ void stampaParametri () {
   Serial.print("finecorsa Avanti:");
   Serial.println(finecorsa_avanti); */
 
+  Serial.print("Distance(cm):");
+  Serial.println(distanza);
+
   Serial.print("sensore_avanti:");
   Serial.println(analogRead(finecAvanti));
   Serial.print("sensore_indietro:");
@@ -160,13 +155,14 @@ void stampaParametri () {
 
 void loop() {
   //***************************************** lettura della distanza ********************************************
-  int input = letturaUltrasuoni();
-  cambioDirezione(input);
+  letturaUltrasuoni();
+  cambioDirezione();
 
   //***************************************** movimento effettivo del braccio ********************************************
   int delta_mov = 0;
-  if(direzioneConcessa()) { // se mi posso muovere
-    delta_mov = movimento(input); 
+  int offset = abs(distanza - obiettivo); //offset = rappresentante la distanza dall'obiettivo
+  if(direzioneConcessa() && offset > SOGLIA && offset < TRESHOLD) { // se mi posso muovere
+    delta_mov = movimento(offset); 
   }
 
   //**************************** calcolo dei prarametri di fine corsa ***************************
@@ -178,5 +174,4 @@ void loop() {
   else{                   Serial.println(- delta_mov);  }
 
   stampaParametri();
-  //delay(30);
 }
