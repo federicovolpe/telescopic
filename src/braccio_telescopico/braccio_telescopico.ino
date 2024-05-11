@@ -1,13 +1,20 @@
 //V 1.0 : il pid gestisce il tempo in cui il motore resta acceso
 // parametri
-const int obiettivo = 10; // obiettivo di distanza in cm 
-#define SOGLIA 1 
+const double obiettivo = 10; // obiettivo di distanza in cm 
+#define SOGLIA 1
 #define SOUND_SPEED 0.034 
 #define TRESHOLD 40
 volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro, tolleranzaFCA, tolleranzaFCI; // parametri di riferimento iniziali per le fotoresistenze
 volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
 volatile int direzione = 1;
-volatile int distanza = obiettivo; // distanza inizializzata come l'obiettivo per non fare iniziare con scatti strani
+volatile double distanza = obiettivo; // distanza inizializzata come l'obiettivo per non fare iniziare con scatti strani
+volatile double tempo_movimento = 0;
+volatile double offset = 0; //offset = rappresentante la distanza dall'obiettivo
+
+// per il pid
+#include <PID_v1.h>
+float P = 1, I = .2, D = .2;
+PID PIDcontroller (&distanza, &tempo_movimento, &obiettivo ,P ,I ,D, REVERSE);
 
 // setup pins
 // per il motore
@@ -48,6 +55,10 @@ void setup() {
    
   Serial.begin(9600);
 
+  // per il pid
+  PIDcontroller.SetMode(AUTOMATIC);
+  PIDcontroller.SetTunings(P, I, D);
+
   // un secondo prima di iniziare
   delay(1000);
 }
@@ -87,21 +98,21 @@ void letturaUltrasuoni() {
   distanza = duration * SOUND_SPEED/2;
 }
 
+void movimento() { // calcola il tempo di movimento del motore e ritorna lo stesso
 
-int movimento(int offset) { // calcola il tempo di movimento del motore e ritorna lo stesso
-  int tempo_movimento = 0;
-
-  if(direzione == 0){ // il movimento in avanti è diversamente proporzionato da quello indietro
+  /*if(direzione == 0){ // il movimento in avanti è diversamente proporzionato da quello indietro
     tempo_movimento = map(offset, SOGLIA, obiettivo, 10, 40);
   }else{
     tempo_movimento = map(offset, SOGLIA, 40, 10, 40);
-  }
+  }*/
+
+  if (distanza < obiettivo) {distanza = obiettivo + (obiettivo - distanza);}
+  PIDcontroller.Compute();
   
   digitalWrite(pwmPin, HIGH);
+  tempo_movimento = map(tempo_movimento, 1, 40, 10, 50);
   delay(tempo_movimento);
   digitalWrite(pwmPin, LOW);
-
-  return tempo_movimento;
 }
 
 bool direzioneConcessa(){ // consento il movimento solo nella direzione libera
@@ -144,12 +155,26 @@ void stampaParametri () {
   Serial.print("Distance(cm):");
   Serial.println(distanza);
 
-  Serial.print("sensore_avanti:");
+  /*Serial.print("sensore_avanti:");
   Serial.println(analogRead(finecAvanti));
   Serial.print("sensore_indietro:");
-  Serial.println(analogRead(finecIndietro));
+  Serial.println(analogRead(finecIndietro));*/
+
+  Serial.print("offset:");
+  Serial.println(offset);
+
+  Serial.print("movimento:");
+  if ( direzione == 1 ){   Serial.println(tempo_movimento);  }
+  else{                   Serial.println(- tempo_movimento);  }
   
   Serial.println("---------------------------------------");
+  Serial.print("direzione concessa");
+  Serial.println(direzioneConcessa());
+  Serial.print("offset > SOGLIA");
+  Serial.println(offset > SOGLIA);
+  Serial.print("offset < TRESHOLD");
+  Serial.println(offset < TRESHOLD);
+  
 }
 
 
@@ -159,19 +184,18 @@ void loop() {
   cambioDirezione();
 
   //***************************************** movimento effettivo del braccio ********************************************
-  int delta_mov = 0;
-  int offset = abs(distanza - obiettivo); //offset = rappresentante la distanza dall'obiettivo
+  offset = abs(distanza - obiettivo); 
   if(direzioneConcessa() && offset > SOGLIA && offset < TRESHOLD) { // se mi posso muovere
-    delta_mov = movimento(offset); 
+    movimento(); 
+  }else{
+    tempo_movimento = 0;
   }
 
   //**************************** calcolo dei prarametri di fine corsa ***************************
   calcolo_finecorsa();
 
   //***************************************** stampa dei parametri di controllo ********************************************
-  Serial.print("movimento:");
-  if ( direzione == 1 ){   Serial.println(delta_mov);  }
-  else{                   Serial.println(- delta_mov);  }
-
+  
   stampaParametri();
+  delay(100);
 }
