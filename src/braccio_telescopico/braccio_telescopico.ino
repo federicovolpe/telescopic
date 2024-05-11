@@ -4,7 +4,7 @@ const int obiettivo = 10; // obiettivo di distanza in cm
 #define SOGLIA 1 
 #define SOUND_SPEED 0.034 
 #define TRESHOLD 40
-volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro; // parametri di riferimento iniziali per le fotoresistenze
+volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro, tolleranzaFCA, tolleranzaFCI; // parametri di riferimento iniziali per le fotoresistenze
 volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
 volatile int direzione = 1;
 volatile int distanza = obiettivo; // distanza inizializzata come l'obiettivo per non fare iniziare con scatti strani
@@ -38,7 +38,9 @@ void setup() {
   pinMode(finecIndietro, INPUT);
   // inizializzazione dei valori delle resistenze per il finecorsa
   sogliaFineCorsaAvanti = analogRead(finecAvanti);
+  tolleranzaFCA = sogliaFineCorsaAvanti /5;
   sogliaFineCorsaIndietro = analogRead(finecIndietro);
+  tolleranzaFCI = sogliaFineCorsaIndietro / 5;
 
   // pin per il sensore ad ultrasuoni
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
@@ -90,9 +92,9 @@ int movimento(int offset) { // calcola il tempo di movimento del motore e ritorn
   int tempo_movimento = 0;
 
   if(direzione == 0){ // il movimento in avanti è diversamente proporzionato da quello indietro
-    tempo_movimento = map(offset, SOGLIA, obiettivo, 20, 40);
+    tempo_movimento = map(offset, SOGLIA, obiettivo, 10, 40);
   }else{
-    tempo_movimento = map(offset, SOGLIA, 40, 20, 40);
+    tempo_movimento = map(offset, SOGLIA, 40, 10, 40);
   }
   
   digitalWrite(pwmPin, HIGH);
@@ -109,10 +111,9 @@ bool direzioneConcessa(){ // consento il movimento solo nella direzione libera
 }
 
 void calcolo_finecorsa(){
-  if(finecorsa_avanti && direzione == 1) {
-    Serial.println("--------non cambio");
-  }else if ( (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > (sogliaFineCorsaAvanti / 5)){
-    Serial.println("--------  fine corsa avanti !!!!!! ");
+  if( (finecorsa_avanti && direzione == 1)||
+    (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > tolleranzaFCA){
+    //Serial.println("--------  fine corsa avanti !!!!!! ");
     digitalWrite(semaforo_avanti, HIGH);
     finecorsa_avanti = true;
   }else{
@@ -120,10 +121,9 @@ void calcolo_finecorsa(){
     finecorsa_avanti = false;
   } 
 
-  if(finecorsa_indietro && direzione == 0){// non cambia se continuo a voler andare verso il finecorsa
-    Serial.println("--------non cambio");
-  }else if( (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > (sogliaFineCorsaIndietro / 5)){ // altrimenti ricalcolo i finecorsa
-    Serial.println("--------  fine corsa indietro !!!!!! ");
+  if( (finecorsa_indietro && direzione == 0)||
+   (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > tolleranzaFCI){ // altrimenti ricalcolo i finecorsa
+    //Serial.println("--------  fine corsa indietro !!!!!! ");
     digitalWrite(semaforo_indietro, HIGH);
     finecorsa_indietro = true;
   }else{
