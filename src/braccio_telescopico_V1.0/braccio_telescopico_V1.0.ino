@@ -1,31 +1,34 @@
 //V 1.0 : il pid gestisce il tempo in cui il motore resta acceso
+
 // parametri
-const double obiettivo = 10; // obiettivo di distanza in cm 
+const double obiettivo = 10;                                  // obiettivo di distanza dal sensore in cm 
 #define SOGLIA 1
-#define SOUND_SPEED 0.034 
+#define SOUND_SPEED 0.034
 #define TRESHOLD 40
-volatile int sogliaFineCorsaAvanti, sogliaFineCorsaIndietro, tolleranzaFCA, tolleranzaFCI; // parametri di riferimento iniziali per le fotoresistenze
-volatile bool finecorsa_indietro = false, finecorsa_avanti = false;
-volatile int direzione = 1;
-volatile double distanza = obiettivo; // distanza inizializzata come l'obiettivo per non fare iniziare con scatti strani
-volatile double distanza_norm;
-volatile double tempo_movimento = 0;
-volatile double offset = 0; //offset = rappresentante la distanza dall'obiettivo
+volatile int FCAiniziale, FCIiniziale,                        // (fine corsa avanti / indietro) lettura iniziale per l'adattamento alla luminosita' ambientale
+              tolleranzaFCA, tolleranzaFCI;                   // parametri di tolleranza per reputare il finecorsa
+volatile bool finecorsa_indietro = false, finecorsa_avanti = false; // parametri iniziali per i finecorsa
+
+volatile int direzione = 1;                                   // direzione presa in un determinato momento
+volatile double distanza ;                                    // distanza dell'ostacolo dal sensore
+volatile double distanza_norm;                                // distanza dal sensore (se scende sotto l'obiettivo riprende a incrementare)
+volatile double tempo_movimento = 0;                          // tempo di attivazione del motore
+volatile double offset = 0;                                   // la distanza dall'obiettivo
 
 // per il pid
 #include <PID_v1.h>
 float P = 1, I = .2, D = .2;
 PID PIDcontroller (&distanza_norm, &tempo_movimento, &obiettivo ,P ,I ,D, REVERSE);
 
-// setup pins
+// ---------------------------- SETUP DEI PIN ----------------------------
 // per il motore
-const int dir1 = 13, dir2 = 12, pwmPin = 11, Signal = 0;  // apparentemente non serve
+const int dir1 = 13, dir2 = 12, pwmPin = 11;  
 
 // pin per il semaforo
 const int semaforo_indietro = 10, semaforo_avanti = 8, semaforo_verde = 9;
 
 // pin per le fotoresistenze di finecorsa
-const int finecAvanti = A2, finecIndietro = A1;
+const int FCA = A2, FCI = A1; // (FineCorsaAvanti, FineCorsaIndietro)
 
 // pin per il sensore ad ultrasuoni
 const int trigPin = A4, echoPin = A5;     
@@ -42,13 +45,13 @@ void setup() {
   pinMode(pwmPin, OUTPUT);
 
   // pin di finecorsa
-  pinMode(finecAvanti, INPUT);
-  pinMode(finecIndietro, INPUT);
+  pinMode(FCA, INPUT);
+  pinMode(FCI, INPUT);
   // inizializzazione dei valori delle resistenze per il finecorsa
-  sogliaFineCorsaAvanti = analogRead(finecAvanti);
-  tolleranzaFCA = sogliaFineCorsaAvanti /5;
-  sogliaFineCorsaIndietro = analogRead(finecIndietro);
-  tolleranzaFCI = sogliaFineCorsaIndietro / 5;
+  FCAiniziale = analogRead(FCA);
+  tolleranzaFCA = FCAiniziale /5;
+  FCIiniziale = analogRead(FCI);
+  tolleranzaFCI = FCIiniziale / 5;
 
   // pin per il sensore ad ultrasuoni
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
@@ -74,12 +77,6 @@ void cambioDirezione() {
       digitalWrite(dir1, LOW);
       digitalWrite(dir2, HIGH);
       direzione = 0;
-  }
-  if(direzione == 1){
-    Serial.println("avanti");
-
-  }else{
-    Serial.print("indietro" );
   }
 }
 
@@ -119,14 +116,14 @@ bool direzioneConcessa(){ // consento il movimento solo nella direzione libera
 
 void calcolo_finecorsa(){
   if( (finecorsa_avanti && direzione == 1)||
-    (sogliaFineCorsaAvanti - analogRead(finecAvanti)) > tolleranzaFCA){
+    (FCAiniziale - analogRead(FCA)) > tolleranzaFCA){
     finecorsa_avanti = true;
   }else{
     finecorsa_avanti = false; 
   } 
 
   if( (finecorsa_indietro && direzione == 0)||
-   (sogliaFineCorsaIndietro - analogRead(finecIndietro)) > tolleranzaFCI){ // altrimenti ricalcolo i finecorsa
+   (FCIiniziale - analogRead(FCI)) > tolleranzaFCI){ // altrimenti ricalcolo i finecorsa
     finecorsa_indietro = true;
   }else{
     finecorsa_indietro = false;
@@ -150,9 +147,9 @@ void stampaParametri () {
   Serial.println(distanza);
 
   /*Serial.print("sensore_avanti:");
-  Serial.println(analogRead(finecAvanti));
+  Serial.println(analogRead(FCA));
   Serial.print("sensore_indietro:");
-  Serial.println(analogRead(finecIndietro));*/
+  Serial.println(analogRead(FCI));*/
 
   Serial.print("offset:");
   Serial.println(offset);
